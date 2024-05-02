@@ -2,3 +2,6 @@ venv
 *.pyc
 __pycache__
 .pytest_cache
+dist
+build
+python_json_patch_rules.egg-info

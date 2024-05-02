@@ -1,8 +1,8 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="jsonpatchrules",
-    version="0.1.0",
+    name="python-json-patch-rules",
+    version="0.1.1",
     author="Bruno Agutoli",
     author_email="bruno.agutoli@gmail.com",
     description="A library to apply JSON patches with rule-based access control.",
@@ -10,7 +10,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/agutoli/python-json-patch-rules",
     # Correct the package_dir to point to 'json_patch_rules' since your actual package code is there
-    package_dir={'': 'json_patch_rules'},
+    package_dir={'': '.'},
     # Since your package is inside the 'json_patch_rules', the 'where' should be corrected from 'src' to 'json_patch_rules'
     packages=find_packages(where='json_patch_rules'),
     python_requires=">=3.6",
