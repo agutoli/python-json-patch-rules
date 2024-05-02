@@ -20,40 +20,77 @@ Install JsonPatchRules using pip:
 pip install jsonpatchrules
 ```
 
-## Quick Start
+### Expanded Example Scenario
 
-Here's a quick example to get you started with JsonPatchRules:
+Let's imagine a more complex JSON structure representing a user profile, including nested objects for personal details, permissions, and an array of contact methods.
 
 ```python
 from jsonpatchrules import patch_rules
 
-# Define your JSON object and the patch rules
+# Define a complex JSON object
 data = {
     "user": {
         "name": "John Doe",
-        "email": "john@example.com"
+        "email": "john@example.com",
+        "permissions": {
+            "edit": True,
+            "delete": False
+        },
+        "contacts": [
+            {"type": "home", "number": "1234567890"},
+            {"type": "work", "number": "0987654321"}
+        ]
     }
 }
 
+# Define rules to specify allowed updates
 rules = [
-    "user.name"  # Allow changes to the name field only
+    "user.{name,email}",  # Allow updates to both the name and email
+    "user.permissions.*",  # Allow updates to any permissions fields
+    "user.contacts[*].number"  # Allow updates to the phone number in any contact
 ]
 
 # Initialize patch rules
 patch = patch_rules(rules)
 
-# Define the new data to apply
+# Define new data to apply
 new_data = {
     "user": {
-        "name": "Jane Doe"
+        "name": "Jane Doe",  # This update is allowed
+        "email": "jane@example.com",  # This update is allowed
+        "permissions": {
+            "edit": False,  # This update is allowed
+            "delete": True  # This update is allowed
+        },
+        "contacts": [
+            {"type": "home", "number": "1111111111"},  # This update is allowed
+            {"type": "work", "number": "2222222222"}  # This update is allowed
+        ]
     }
 }
 
 # Apply the patch
 result = patch.apply(data, new_data)
 
-print(result.patched_data)  # Output the updated JSON object
+# Output the updated JSON object
+print("Patched Data:", result.patched_data)
+print("Denied Paths:", result.denied_paths)
+print("Successed Paths:", result.successed_paths)
 ```
+
+### Explanation of This Example
+
+1. **Complex JSON Structure**: The `data` dictionary includes nested objects and arrays, reflecting a realistic data structure you might encounter in applications.
+
+2. **Diverse Rule Definitions**:
+   - `"user.{name,email}"`: This rule uses curly braces `{}` to specify that both `name` and `email` fields under `user` can be updated.
+   - `"user.permissions.*"`: The wildcard `*` allows changes to any fields under `permissions`, demonstrating flexibility in what can be updated without listing every possible field.
+   - `"user.contacts[*].number"`: This rule demonstrates how to allow updates to specific fields within any object in an array. The `[*]` wildcard allows the operation on any element index within the `contacts` array.
+
+3. **Patch Application and Results**: The `apply` method is used to attempt updating `data` with `new_data` based on the defined `rules`. The results show which paths were successfully updated and which were denied, although in this example, all updates conform to the rules.
+
+This example is comprehensive, demonstrating key features of your library and providing users with a clear understanding of how to implement rule-based JSON patching in their applications.
+
 
 ## Usage
 
