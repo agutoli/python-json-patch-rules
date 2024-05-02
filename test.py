@@ -1,5 +1,5 @@
 # tests/test_module.py
-from jsonpatchrules import patch_rules
+from json_patch_rules import patch_rules
 
 patch = patch_rules([
     "{a,b}.test"

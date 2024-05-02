@@ -1,5 +1,5 @@
 import pytest
-from jsonpatchrules import patch_rules
+from json_patch_rules import patch_rules
 
 @pytest.fixture
 def sample_data():
