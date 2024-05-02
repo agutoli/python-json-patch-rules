@@ -1,7 +1,3 @@
-Creating a well-structured `README.md` is crucial for your library as it serves as the front page of your repository on platforms like GitHub. It should clearly communicate what your library does, how to install it, how to use it, and where to get help if needed. Here’s a suggested structure for your `README.md` for the `JsonPatchRules` Python library:
-
----
-
 # JsonPatchRules
 
 JsonPatchRules is a Python library designed to facilitate the application of JSON patch operations while enforcing customizable validation rules. This library ensures that updates to JSON objects adhere to predefined permissions, making it ideal for systems that require granular access control.
@@ -120,13 +116,3 @@ Contributions are welcome! Please feel free to submit pull requests, report bugs
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-### Notes:
-
-1. **Structure**: The README is structured to introduce the library, provide installation instructions, show a quick start guide, explain usage, invite contributions, and mention the license.
-2. **Customization**: Adjust the text to better fit the specifics of your library or additional details you might want to include.
-3. **Details**: Be sure to replace placeholder texts like `jsonpatchrules` with the actual name of your library if different, and update the GitHub URL or any other links when you have them.
-
-This README template should give users enough information to get started with your library quickly and encourage them to contribute or delve deeper into its documentation.
