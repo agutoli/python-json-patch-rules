@@ -13,7 +13,7 @@ JsonPatchRules is a Python library designed to facilitate the application of JSO
 Install JsonPatchRules using pip:
 
 ```bash
-pip install json_patch_rules
+pip install python-json-patch-rules
 ```
 
 ### Expanded Example Scenario
