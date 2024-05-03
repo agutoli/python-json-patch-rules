@@ -10,11 +10,11 @@ dependencies:
   - ncurses
   - openssl
   - pip
-  - pydash=8.0.1=pyhca7485f_0
+  - pydash
   - python
   - readline
   - setuptools
-  - tk=8.6.13
+  - tk
   - typing_extensions
   - tzdata
   - wheel
