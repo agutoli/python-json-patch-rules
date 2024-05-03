@@ -92,3 +92,15 @@ def test_allow_replace_array(sample_data):
 
     assert result.patched_data["root_key_3"] == ["replaced_value"], \
         "Should replace the whole array with anything"
+
+
+# def test_with_root_array_level(sample_data):
+#     patch = patch_rules(["[*].root_key_3[:replace:]"])
+
+#     result = patch.apply([sample_data], [{
+#         "root_key_3": ["replaced_value"]
+#     }])
+
+#     print(result)
+#     assert result.patched_data["root_key_3"] == ["replaced_value"], \
+#         "Should replace the whole array with anything"
