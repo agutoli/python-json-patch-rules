@@ -71,3 +71,24 @@ def test_allow_replace_array_with_wildcard(sample_data):
 
     assert result.successed_paths == ['root_key_3[0]', 'root_key_3[1]', 'root_key_3[2]'], \
         "Should allow updates to all elements in the root_key_3 array"
+
+def test_allow_replace_array_unique_values(sample_data):
+    patch = patch_rules(["root_key_3[:unique:]"])
+
+    result = patch.apply(sample_data, {
+        "root_key_3": ["a", "b", "b", "b", 1, 2, 2]
+    })
+
+    assert result.patched_data["root_key_3"] == ['a', 'b', 1, 2], \
+        "Should remove duplicated values"
+
+
+def test_allow_replace_array(sample_data):
+    patch = patch_rules(["root_key_3[:replace:]"])
+
+    result = patch.apply(sample_data, {
+        "root_key_3": ["replaced_value"]
+    })
+
+    assert result.patched_data["root_key_3"] == ["replaced_value"], \
+        "Should replace the whole array with anything"
