@@ -19,3 +19,4 @@ dependencies:
   - tzdata
   - wheel
   - xz
+  - flake8
