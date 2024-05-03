@@ -20,3 +20,4 @@ dependencies:
   - wheel
   - xz
   - flake8
+  - pytest
