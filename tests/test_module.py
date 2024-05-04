@@ -33,6 +33,15 @@ def test_denied_paths(sample_data):
     assert result.denied_paths == ["root_key_1.dog_key_2"], "Should deny updates to non-whitelisted paths"
 
 
+def test_raise_exception_when_diff_types(sample_data):
+    patch = patch_rules([
+        "*"
+    ])
+
+    with pytest.raises(TypeError, match="The data and the patch must have the same types. old_data=list, new_data=dict"):
+        patch.apply([], {})
+
+
 def test_wildcard_rules_succeed_paths(sample_data):
     patch = patch_rules(["root_key_1.*"])  # All sub-keys of root_key_1 are allowed
 
@@ -93,14 +102,63 @@ def test_allow_replace_array(sample_data):
     assert result.patched_data["root_key_3"] == ["replaced_value"], \
         "Should replace the whole array with anything"
 
+def test_overwrite_array_with_empty(sample_data):
+    patch = patch_rules([
+        "*"
+    ])
 
-# def test_with_root_array_level(sample_data):
-#     patch = patch_rules(["[*].root_key_3[:replace:]"])
+    result = patch.apply([sample_data], [])
+    assert result.patched_data == [], \
+        "Should replace the root level of the array with empty list"
 
-#     result = patch.apply([sample_data], [{
-#         "root_key_3": ["replaced_value"]
-#     }])
+def test_empty_values_dict(sample_data):
+    patch = patch_rules([])
+    result = patch.apply({}, {})
+    assert result.patched_data == {}, \
+        "Should return same types"
 
-#     print(result)
-#     assert result.patched_data["root_key_3"] == ["replaced_value"], \
-#         "Should replace the whole array with anything"
+def test_empty_values_list(sample_data):
+    patch = patch_rules([])
+    result = patch.apply([], [])
+    assert result.patched_data == [], \
+        "Should return same types"
+
+
+def test_empty_values_list(sample_data):
+    patch = patch_rules([
+        "level_1:replace.*"
+    ])
+    result = patch.apply({
+        "level_1": {
+            "level_2": "abc"
+        }
+    }, {})
+
+    assert result.patched_data == {}, \
+        "Should return same types"
+
+
+# def test_set_new_property_in_object_within_array(sample_data):
+#     patch = patch_rules([
+#         "[*].foo"
+#     ])
+
+#     result = patch.apply([sample_data], [
+#         {"foo": "bar"}
+#     ])
+
+#     assert result.patched_data == [{**sample_data, "foo": "bar"}], \
+#         "Should replace the root level of the array with empty list"
+
+
+# def test_set_new_property_in_object_within_array(sample_data):
+#     patch = patch_rules([
+#         "[:replace:]"
+#     ])
+
+#     result = patch.apply([sample_data], [
+#         {"foo": "bar"}
+#     ])
+
+#     assert result.patched_data == [{**sample_data, "foo": "bar"}], \
+#         "Should replace the root level of the array with empty list"

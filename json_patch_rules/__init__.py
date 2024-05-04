@@ -1,4 +1,5 @@
 import re
+import json
 import pydash
 from typing import Any, Optional, Pattern
 from dataclasses import dataclass
@@ -22,8 +23,15 @@ class PatchResult:
     patched_data: Any
     errors: list[str]
 
+
+@dataclass
+class PatchingStore:
+    old_data: Any = None
+    new_data: Any = None
+
+
 class JsonPatchRules:
-    INDEX_WILDCARD     = "0__INDEX_WILDCARD__0"
+    ANY_INDEX_WILDCARD     = "0__ANY_INDEX_WILDCARD__0"
     UNIQUE_ITEMS_LIST  = "0__UNIQUE_ITEMS_LIST__0"
     REPLACE_ITEMS_LIST = "0__REPLACE_ITEMS_LIST__0"
     ANY_KEY_WILDCARD   = "0__ANY_KEY_WILDCARD__0"
@@ -51,18 +59,19 @@ class JsonPatchRules:
         """Convert a permission rule into a regex pattern for matching paths."""
         # Temporary placeholders for complex wildcards to avoid premature escaping
         placeholder_dict = {
-            '[*]': self.INDEX_WILDCARD,
             '[:unique:]': self.UNIQUE_ITEMS_LIST,
             '[:replace:]': self.REPLACE_ITEMS_LIST,
+            '[*]': self.ANY_INDEX_WILDCARD,
             '{*}': self.ANY_KEY_WILDCARD,
             '*': self.ANY_SEG_WILDCARD,
         }
+
         for key, value in placeholder_dict.items():
             rule = rule.replace(key, value)
 
         # Escape the rule to safely turn into regex, then restore placeholders to regex patterns
         rule = re.escape(rule)
-        rule = rule.replace(re.escape(self.INDEX_WILDCARD), r'\[\d+\]')
+        rule = rule.replace(re.escape(self.ANY_INDEX_WILDCARD), r'\[\d+\]')
         rule = rule.replace(re.escape(self.ANY_KEY_WILDCARD), r'[^.]+')
         rule = rule.replace(re.escape(self.ANY_SEG_WILDCARD), r'.+')
 
@@ -79,7 +88,7 @@ class JsonPatchRules:
         # instead of using pydash.set_()
         unique_items_parts = rule.split(self.UNIQUE_ITEMS_LIST)
         if len(unique_items_parts) > 1:
-            # rule = unique_items_parts[0] # ignore all properties after [:unique:]
+            rule = unique_items_parts[0] # ignore all properties after [:unique:]
             rule_item.replace = True
             rule_item.unique = True
             rule_item.replace_path = unique_items_parts[0]
@@ -87,13 +96,22 @@ class JsonPatchRules:
         # Allow replace the whole array
         replace_items_parts = rule.split(self.REPLACE_ITEMS_LIST)
         if len(replace_items_parts) > 1:
-            rule = replace_items_parts[0] # ignore all properties after [:unique:]
+            rule = rule.replace(re.escape(self.REPLACE_ITEMS_LIST), r'.*')
             rule_item.replace = True
             rule_item.unique = False
             rule_item.replace_path = replace_items_parts[0]
-
+        
         rule_item.compile = re.compile('^' + rule + '$')
         return rule_item
+
+    def replace_with_value(self, data_to_patch, path, values) -> None:
+            pydash.set_(data_to_patch, path, values)
+
+    def patch_value(self, data_to_patch, path, values) -> None:
+        if not values:
+            pydash.unset(data_to_patch, path)
+        else:
+            pydash.set_(data_to_patch, path, values)
 
     def verify_permission(self, data_paths, permission_rules):
         """Check if the provided data paths are allowed by the permission rules."""
@@ -104,26 +122,37 @@ class JsonPatchRules:
                 if rule_item.replace and rule_item.replace_path:
                     results[rule_item.replace_path] = [True, rule_item]
                 elif rule_item.compile:
-                    results[path] = [rule_item.compile.match(path), rule_item]
+                    if rule_item.replace:
+                        results[path] = [True, rule_item]
+                    else:
+                        results[path] = [rule_item.compile.match(path), rule_item]
                 else:
                     results[path] = [False, None]
         return results
 
-    def item_checker(self, path, allowed, new_data, data_to_patch):
-        denied_paths = []
-        successed = []
-        errors = []
-
+    def item_checker(self, path, allowed, store, successed, denied_paths, errors):
         if not allowed[0]:
             denied_paths.append(path)
             return successed, denied_paths, errors
-
-        if not allowed[1].unique:
-            pydash.set_(data_to_patch, path, pydash.get(new_data, path))
+        
+        if isinstance(store.new_data, list):
+            # print(path, EMPTY_ARRAY_SYMBOL, store.new_data)
+            # and store.new_data[0] == EMPTY_ARRAY_SYMBOL
+            self.patch_value(store.old_data, path, None)
             successed.append(path)
             return successed, denied_paths, errors
 
-        items_values = pydash.get(new_data, path)
+        if allowed[1].replace and not allowed[1].unique:
+            self.replace_with_value(store.old_data, path, pydash.get(store.new_data, path))
+            successed.append(path)
+            return successed, denied_paths, errors
+
+        if not allowed[1].unique:
+            self.patch_value(store.old_data, path, pydash.get(store.new_data, path))
+            successed.append(path)
+            return successed, denied_paths, errors
+
+        items_values = pydash.get(store.new_data, path)
         if isinstance(items_values, list):
             try:
                 # It can not have boolean
@@ -148,24 +177,46 @@ class JsonPatchRules:
                     errors.append([path, error_message])
                     denied_paths.append(path)
                     return successed, denied_paths, errors
-        pydash.set_(data_to_patch, path, items_values)
-
+                
+        self.patch_value(store.old_data, path, items_values)
         successed.append(path)
         return successed, denied_paths, errors
 
-    def apply(self, data, new_data):
-        cloned_data = pydash.clone_deep(data)
-        results = self.verify_permission(self.get_paths(new_data), self.rules)
+    def apply(self, old_data, new_data):
+        # First validation is check if same type, otherwise raise error
+        if isinstance(old_data, list) != isinstance(new_data, list):
+            old_data_type = type(old_data).__name__
+            new_data_type = type(new_data).__name__
+            raise TypeError(f"The data and the patch must have the same types. old_data={old_data_type}, new_data={new_data_type}")
+
+        store = PatchingStore(
+            old_data=pydash.clone_deep(old_data),
+            new_data=pydash.clone_deep(new_data),
+        )
+
+        # Fix when need to setup empty values
+        if not store.new_data and isinstance(store.new_data, list):
+            store.new_data = [EMPTY_ARRAY_SYMBOL]
+
+        results = self.verify_permission(list(self.get_paths(store.new_data)), self.rules)
 
         errors = []
         successed = []
         denied_paths = []
+
         for path, allowed in results.items():
-            successed, denied_paths, errors = self.item_checker(path, allowed, new_data, cloned_data)
+            successed, denied_paths, errors = self.item_checker(
+                path,
+                allowed,
+                store,
+                successed,
+                denied_paths,
+                errors
+            )
 
         return PatchResult(
             errors=errors,
-            patched_data=cloned_data,
+            patched_data=store.old_data,
             is_patched=len(denied_paths) == 0,
             denied_paths=denied_paths,
             successed_paths=successed
