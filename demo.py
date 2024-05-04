@@ -18,28 +18,32 @@ data = {
 
 
 rules = [
-    "*|replace",                      # allows to replace value at root level object or array
-    "!*|replace",                     # deny to replace value at root level object or array
-    "{*}|replace",                    # allows to replace any object keys/values
-    "!{*}|replace",                   # deny to replace any object keys/values
-    "{*}",                            # implicit set - allows to set new attributes but not remove it
-    "!{*}",                           # implicit set - deny to set new attributes but not remove it
-    "{*}|set",                        # allows to set new attributes but not remove it
-    "[0]",                            # implicit set - allows to replace index "0" with any value (string, object, int, etc)
-    "[0]|string",                     # set only string type
-    "[0]|string|number",              # set only string type
-    "[0]|replace",                    # allows to replace index "0" with any value (string, object, int, etc)
-    "[*]|unique",                     # allows to replace array but denies if duplicated items (it works only for array of strings)
-    "[*]|add",                        # allows to add new items but it can't remove any existent one. 
-    "[*]|add|unique",                 # allows to add new items but it will ignore if already exists. 
-    "user",                           # allows to set value to user property (it must be object at root level)
-    "!user",                          # deny to set value to user property (it must be object at root level)
-    "[0].title",                      # allows to set new value for properties (in this case title)
-    "[0].nested.foo",                 # allows to set new value for property nested but it will fail if not object type
-    "user.contacts[0].phone",         # allows set user contacts but only if array 0 but only property phone
-    "user.contacts[0].label",         # allows set user contacts but only if array 0 but only property label
-    "user.contacts[0].{label,phone}", # allows set user contacts but only if array 0 and label and/or phone
+    "*|replace"                      # allows to replace value at root level object or array
+    "!*|replace"                     # deny to replace value at root level object or array
+    "{*}|replace"                    # allows to replace any object keys/values
+    "!{*}|replace"                   # deny to replace any object keys/values
+    "{*}"                            # implicit set - allows to set new attributes but not remove it
+    "!{*}"                           # implicit set - deny to set new attributes but not remove it
+    "{*}|set"                        # allows to set new attributes but not remove it
+    "[0]"                            # implicit set - allows to replace index "0" with any value (string, object, int, etc)
+    "[0]|string"                     # set only string type
+    "[0]|string|number"              # set only string type
+    "[0]|replace"                    # allows to replace index "0" with any value (string, object, int, etc)
+    "[*]|unique"                     # allows to replace array but denies if duplicated items (it works only for array of strings)
+    "[*]|add"                        # allows to add new items but it can't remove any existent one. 
+    "[*]|add|unique"                 # allows to add new items but it will ignore if already exists. 
+    "user"                           # allows to set value to user property (it must be object at root level)
+    "!user"                          # deny to set value to user property (it must be object at root level)
+    "[0].title"                      # allows to set new value for properties (in this case title)
+    "[0].nested.foo"                 # allows to set new value for property nested but it will fail if not object type
+    "user.contacts[0].phone"         # allows set user contacts but only if array 0 but only property phone
+    "user.contacts[0].label"         # allows set user contacts but only if array 0 but only property label
+    "user.contacts[0].{label,phone}" # allows set user contacts but only if array 0 and label and/or phone
     "user.contacts[*].label"          # allows set property label to any index inside contacts array
+    "foo.{key1,key2}.last"            # allows to set "foo.key1.last" or "foo.key2.last" key.
+    "bar.{key1}.b"                    # allows to set "foo.key1.b" only
+    "bar.key1.b"                      # allows to set "foo.key1.b" only (same as above)
+    "!bar.key1.b"                     # deny to set "foo.key1.b" only (same as above)
 ]
 
 patch = patch_rules(rules)
