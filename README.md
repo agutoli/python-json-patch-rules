@@ -16,6 +16,26 @@ Install Json Patch Rules using pip:
 pip install python-json-patch-rules
 ```
 
+## API
+
+| Rule                        | Description                                                                                       |
+|-----------------------------|---------------------------------------------------------------------------------------------------|
+| `{*}`                       | Implicit set - allows to set new attributes but not remove them.                                  |
+| `!{*}`                      | Implicit set - denies the ability to set new attributes.                                          |
+| `[0]`                       | Implicit set - allows replacing index "0" with any value (string, object, int, etc).              |
+| `[0]\|replace`               | Allows replacing index "0" with any value (string, object, int, etc).                             |
+| `[*]\|unique`                | Allows replacing an array but denies if there are duplicated items (works only for arrays of strings). |
+| `user`                      | Allows setting value to user property (must be an object at root level).                          |
+| `!user`                     | Denies setting value to user property (must be an object at root level).                          |
+| `[0].title`                 | Allows setting new value for properties (in this case title).                                     |
+| `[0].nested.foo`            | Allows setting new value for property nested but will fail if not object type.                    |
+| `user.contacts[0].phone`    | Allows setting user contacts but only if array index 0 and only property phone.                   |
+| `user.contacts[0].label`    | Allows setting user contacts but only if array index 0 and only property label.                   |
+| `user.contacts[*].label`    | Allows setting property label to any index inside contacts array.                                 |
+| `bar.key1.b`                | Allows to set "foo.key1.b" only.                                                                  |
+| `!bar.key1.b`               | Denies to set "foo.key1.b" only.                                                                  |
+
+
 ### Expanded Example Scenario
 
 Let's imagine a more complex JSON structure representing a user profile, including nested objects for personal details, permissions, and an array of contact methods.

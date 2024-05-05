@@ -7,7 +7,7 @@ class Symbol(str):
         return super(Symbol, cls).__new__(cls, f"Symbol({value})")
 
     def __repr__(self) -> str:
-        return f"Symbol({self.__value})"
+        return f"Symbol({self.__value}:{self.__symbol_id})"
 
     def __eq__(self, other):
         if isinstance(other, Symbol):

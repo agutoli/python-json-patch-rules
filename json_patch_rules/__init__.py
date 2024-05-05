@@ -1,47 +1,74 @@
 import re
-import json
-import pydash
-from typing import Any, Optional, Pattern
+from typing import Any, Optional, Pattern, List, Set, Tuple, Generator
 from dataclasses import dataclass
+import pydash
 from json_patch_rules.__symbols__ import EMPTY_ARRAY_SYMBOL
-
 
 @dataclass
 class RuleItem:
-    rule_pattern: str
-    replace: bool = False
-    unique: bool = False
-    replace_path: Optional[str] = None
-    pattern: Optional[str] = None
-    compile: Optional[Pattern[str]] = None
+    actions: Set[str]
+    current_rule: str = ''
+    path: Optional[str] = None
+    deny: bool = False
+    pattern: Optional[Pattern[str]] = None
+    parent_path: Optional[str] = None
 
 @dataclass
-class PatchResult:
-    denied_paths: list[str]
-    successed_paths: list[str]
-    is_patched: bool
-    patched_data: Any
-    errors: list[str]
-
-
-@dataclass
-class PatchingStore:
-    old_data: Any = None
-    new_data: Any = None
+class ResultData:
+    data: Any
+    denied_paths: List[str]
+    successed_paths: List[str]
 
 
 class JsonPatchRules:
-    ANY_INDEX_WILDCARD     = "0__ANY_INDEX_WILDCARD__0"
-    UNIQUE_ITEMS_LIST  = "0__UNIQUE_ITEMS_LIST__0"
-    REPLACE_ITEMS_LIST = "0__REPLACE_ITEMS_LIST__0"
-    ANY_KEY_WILDCARD   = "0__ANY_KEY_WILDCARD__0"
-    ANY_SEG_WILDCARD   = "0__ANY_SEG_WILDCARD__0"
+    ROOT_TOKEN_REPLACE = '*|replace'
+    ROOT_TOKEN_KEY = '{*}'
+    ROOT_TOKEN_KEY_REPLACE = '{*}|replace'
+    ROOT_TOKEN_ARRAY = '[*]'
+    ROOT_TOKEN_ARRAY_REPLACE = '[*]|replace'
 
-    def __init__(self, rules) -> None:
-        self.rules = rules
+    PATTERN_WILDCARD_ANY = r'(?P<ANY>.*)'
+    PATTERN_WILDCARD_ANY_KEY = r'(?P<ANY_KEY>.*)'
+    PATTERN_WILDCARD_ANY_INDEX = r'(?P<INDEX>\[\d+\])'
 
-    def get_paths(self, obj, current_path=""):
-        """ Recursively find all paths in a nested JSON object and format them in dot and bracket notation. """
+    def __init__(self, rules: List[str]) -> None:
+        self.rules: List[RuleItem] = [self.parse_rule(rule) for rule in rules]
+
+    def parse_rule(self, current_rule: str) -> RuleItem:
+        deny = current_rule.startswith('!')
+        rule_item = RuleItem(set(), deny=deny, current_rule=current_rule)
+
+        rule = current_rule[1:] if deny else current_rule
+        parts = rule.split('|')
+
+        path = parts[0].replace(r'\[\d\]$', '')
+        path = re.sub(r'\[\*\]+$', '', path)
+        path = re.sub(r'\[\d\]+$', '', path)
+        path = re.sub(r'\{\*\}+$', '', path)
+        rule_item.parent_path = path
+
+        path = path.replace('{*}', self.PATTERN_WILDCARD_ANY_KEY)
+        path = path.replace('[*]', self.PATTERN_WILDCARD_ANY_INDEX)
+
+        # ATTENTION: It must be after any replace that contains "*" character
+        path = path.replace('*', self.PATTERN_WILDCARD_ANY)
+        actions = set(parts[1:]) if len(parts) > 1 else {'set'}
+        pattern = re.compile(f'^{path}')
+
+        rule_item.path = path
+        rule_item.pattern = pattern
+        rule_item.actions = actions
+
+        return rule_item
+
+    def to_unique(self, items: List[Any]) -> List[Any]:
+        ordered_list = []
+        for item in items:
+            if item not in ordered_list:
+                ordered_list.append(item)
+        return ordered_list
+
+    def get_paths(self, obj: Any, current_path: str = "") -> Generator[str, str, str | None]:
         if isinstance(obj, dict):
             for k, v in obj.items():
                 new_path = f"{current_path}.{k}" if current_path else k
@@ -53,176 +80,78 @@ class JsonPatchRules:
         else:
             yield current_path
 
-    def parse_rule(self, rule):
-        rule_item = RuleItem(rule_pattern=rule)
+    def verify_permission(self, data_path: str, new_data: Any) -> Tuple[bool, RuleItem, Optional[str]]:
+        check_all_responses = []
+        for rule in self.rules:
+            if self.ROOT_TOKEN_KEY == rule.current_rule and isinstance(new_data, dict):
+                return (True, rule, None)
+            elif self.ROOT_TOKEN_ARRAY == rule.current_rule and isinstance(new_data, list):
+                return (True, rule, None)
+            elif self.ROOT_TOKEN_KEY_REPLACE == rule.current_rule and isinstance(new_data, dict):
+                return (True, rule, None)
+            elif self.ROOT_TOKEN_ARRAY_REPLACE == rule.current_rule and isinstance(new_data, list):
+                return (True, rule, None)
+            elif self.ROOT_TOKEN_REPLACE == rule.current_rule and isinstance(new_data, (list, dict)):
+                return (True, rule, None)
 
-        """Convert a permission rule into a regex pattern for matching paths."""
-        # Temporary placeholders for complex wildcards to avoid premature escaping
-        placeholder_dict = {
-            '[:unique:]': self.UNIQUE_ITEMS_LIST,
-            '[:replace:]': self.REPLACE_ITEMS_LIST,
-            '[*]': self.ANY_INDEX_WILDCARD,
-            '{*}': self.ANY_KEY_WILDCARD,
-            '*': self.ANY_SEG_WILDCARD,
-        }
+            match_result = rule.pattern and rule.pattern.match(data_path)
+            allow = (match_result and not rule.deny) or data_path.startswith(rule.current_rule)
+            check_all_responses.append((allow, rule, data_path))
 
-        for key, value in placeholder_dict.items():
-            rule = rule.replace(key, value)
+        # Check if has at least a single allow=True
+        for item in check_all_responses:
+            if item[0]:
+                return item
 
-        # Escape the rule to safely turn into regex, then restore placeholders to regex patterns
-        rule = re.escape(rule)
-        rule = rule.replace(re.escape(self.ANY_INDEX_WILDCARD), r'\[\d+\]')
-        rule = rule.replace(re.escape(self.ANY_KEY_WILDCARD), r'[^.]+')
-        rule = rule.replace(re.escape(self.ANY_SEG_WILDCARD), r'.+')
+        return (False, RuleItem(set([])), None)
 
-        # Replace {key1,key2,...} with regex alternation group
-        def replace_options(match):
-            options = match.group(1)
-            options = '|'.join(re.escape(option.strip()) for option in options.split(','))
-            return f"(?:{options})"
+    def apply(self, old_data: Any, new_data: Any) -> ResultData:
+        result = ResultData(pydash.clone_deep(old_data), [], [])
 
-        rule = re.sub(r'\\{([^\\}]+)\\}', replace_options, rule)
-
-        # Check if using :unique: and remove all rules after that
-        # given we can replace the whole array doing a regular variable assign
-        # instead of using pydash.set_()
-        unique_items_parts = rule.split(self.UNIQUE_ITEMS_LIST)
-        if len(unique_items_parts) > 1:
-            rule = unique_items_parts[0] # ignore all properties after [:unique:]
-            rule_item.replace = True
-            rule_item.unique = True
-            rule_item.replace_path = unique_items_parts[0]
-
-        # Allow replace the whole array
-        replace_items_parts = rule.split(self.REPLACE_ITEMS_LIST)
-        if len(replace_items_parts) > 1:
-            rule = rule.replace(re.escape(self.REPLACE_ITEMS_LIST), r'.*')
-            rule_item.replace = True
-            rule_item.unique = False
-            rule_item.replace_path = replace_items_parts[0]
+        actions_data = {"unique": []}
+        value_obj_paths = list(self.get_paths(new_data))
         
-        rule_item.compile = re.compile('^' + rule + '$')
-        return rule_item
+        if len(value_obj_paths) == 0:
+            value_obj_paths = [EMPTY_ARRAY_SYMBOL]
 
-    def replace_with_value(self, data_to_patch, path, values) -> None:
-            pydash.set_(data_to_patch, path, values)
+        for path in value_obj_paths:
+            is_allowed, rule_item, data_path = self.verify_permission(path, new_data)
+            if is_allowed:
+                should_replace = 'replace' in rule_item.actions
+                should_be_unique = 'unique' in rule_item.actions
 
-    def patch_value(self, data_to_patch, path, values) -> None:
-        if not values:
-            pydash.unset(data_to_patch, path)
-        else:
-            pydash.set_(data_to_patch, path, values)
-
-    def verify_permission(self, data_paths, permission_rules):
-        """Check if the provided data paths are allowed by the permission rules."""
-        rule_items = [self.parse_rule(rule) for rule in permission_rules]
-        results = {}
-        for path in data_paths:
-            for rule_item in rule_items:
-                if rule_item.replace and rule_item.replace_path:
-                    results[rule_item.replace_path] = [True, rule_item]
-                elif rule_item.compile:
-                    if rule_item.replace:
-                        results[path] = [True, rule_item]
-                    else:
-                        results[path] = [rule_item.compile.match(path), rule_item]
+                result.successed_paths.append(path)
+                if should_replace and data_path is None:
+                    result.data = new_data
+                elif should_replace and data_path:
+                    pydash.set_(result.data, rule_item.path, pydash.get(new_data, rule_item.path))
+                elif should_be_unique:
+                    new_value = pydash.get(new_data, path)
+                    pydash.get(result.data, rule_item.path, []).append(new_value)
                 else:
-                    results[path] = [False, None]
-        return results
+                    new_value = pydash.get(new_data, path)
+                    pydash.set_(result.data, path, new_value)
 
-    def item_checker(self, path, allowed, store, successed, denied_paths, errors):
-        if not allowed[0]:
-            denied_paths.append(path)
-            return successed, denied_paths, errors
-        
-        if isinstance(store.new_data, list):
-            # print(path, EMPTY_ARRAY_SYMBOL, store.new_data)
-            # and store.new_data[0] == EMPTY_ARRAY_SYMBOL
-            self.patch_value(store.old_data, path, None)
-            successed.append(path)
-            return successed, denied_paths, errors
+                ### 1) Unique + Replace = It allows user to remove itens from array
+                if should_be_unique and should_replace:
+                    actions_data["unique"].append((rule_item, data_path))
+                ### 2) Unique  = It add new itens to array if not exists
+                elif should_be_unique and not should_replace:
+                    actions_data["unique"].append((rule_item, data_path))
+            else:
+                result.denied_paths.append(path)
 
-        if allowed[1].replace and not allowed[1].unique:
-            self.replace_with_value(store.old_data, path, pydash.get(store.new_data, path))
-            successed.append(path)
-            return successed, denied_paths, errors
+        for item in actions_data["unique"]:
+            rule_item, data_path = item
+            current_value = pydash.get(result.data, rule_item.path)
+            if isinstance(current_value, list):
+                pydash.set_(result.data, rule_item.path, self.to_unique(current_value))
+            elif isinstance(result.data, list): # should support all json types except list and object
+                for item in new_data:
+                    result.data.append(item)
+                    result.data = self.to_unique(result.data)
 
-        if not allowed[1].unique:
-            self.patch_value(store.old_data, path, pydash.get(store.new_data, path))
-            successed.append(path)
-            return successed, denied_paths, errors
+        return result
 
-        items_values = pydash.get(store.new_data, path)
-        if isinstance(items_values, list):
-            try:
-                # It can not have boolean
-                bools_in_list = [x for x in items_values if isinstance(x, bool)]
-                if len(bools_in_list) > 0:
-                    error_message = (
-                        f"Failed to make unique: boolean found in list at '{path}'. "
-                        f"Boleans cannot be used with the [:unique:] modifier because they are unhashable. "
-                        f"Encountered error while processing rule: {allowed[1].rule_pattern}."
-                    )
-                    errors.append([path, error_message])
-                    denied_paths.append(path)
-                    return successed, denied_paths, errors
-                items_values = list(dict.fromkeys(items_values))
-            except TypeError as err:
-                if "unhashable type: 'dict'" in str(err):
-                    error_message = (
-                        f"Failed to make unique: dictionaries found in list at '{path}'. "
-                        f"Dictionaries and other mutable types cannot be used with the [:unique:] modifier because they are unhashable. "
-                        f"Encountered error while processing rule: {allowed[1].rule_pattern}."
-                    )
-                    errors.append([path, error_message])
-                    denied_paths.append(path)
-                    return successed, denied_paths, errors
-                
-        self.patch_value(store.old_data, path, items_values)
-        successed.append(path)
-        return successed, denied_paths, errors
-
-    def apply(self, old_data, new_data):
-        # First validation is check if same type, otherwise raise error
-        if isinstance(old_data, list) != isinstance(new_data, list):
-            old_data_type = type(old_data).__name__
-            new_data_type = type(new_data).__name__
-            raise TypeError(f"The data and the patch must have the same types. old_data={old_data_type}, new_data={new_data_type}")
-
-        store = PatchingStore(
-            old_data=pydash.clone_deep(old_data),
-            new_data=pydash.clone_deep(new_data),
-        )
-
-        # Fix when need to setup empty values
-        if not store.new_data and isinstance(store.new_data, list):
-            store.new_data = [EMPTY_ARRAY_SYMBOL]
-
-        results = self.verify_permission(list(self.get_paths(store.new_data)), self.rules)
-
-        errors = []
-        successed = []
-        denied_paths = []
-
-        for path, allowed in results.items():
-            successed, denied_paths, errors = self.item_checker(
-                path,
-                allowed,
-                store,
-                successed,
-                denied_paths,
-                errors
-            )
-
-        return PatchResult(
-            errors=errors,
-            patched_data=store.old_data,
-            is_patched=len(denied_paths) == 0,
-            denied_paths=denied_paths,
-            successed_paths=successed
-        )
-
-
-def patch_rules(rules):
-    jsonpatch = JsonPatchRules(rules)
-    return jsonpatch
+def patch_rules(rules: List[str]) -> JsonPatchRules:
+    return JsonPatchRules(rules)
