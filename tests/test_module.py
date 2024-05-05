@@ -70,7 +70,8 @@ def test_implicit_set_allowed():
     old_data = {"user": {"name": "old"}}
     new_data = {"user": {"age": 30}}  # Attempt to add a new key
     result = patch.apply(old_data, new_data)
-    assert {'age': {'age': 30}, 'name': 'old'} == result.data["user"], "Should allow setting new attributes"
+    assert "old" == result.data["user"]["name"], "Should allow setting new attributes"
+    assert 30 == result.data["user"]["age"], "Should allow setting new attributes"
 
 def test_replace_nested_array_attribute():
     rules = ["user.contacts|replace"]
@@ -138,3 +139,37 @@ def test_replace_root_dict():
     new_data = {"b": 2}
     result = patch.apply(old_data, new_data)
     assert {"b": 2} == result.data, "Should replace old value with new dict"
+
+def test_root_implicit_object_set_allowed():
+    rules = ["{*}"]
+    patch = patch_rules(rules)
+    old_data = {"user": {"name": "old"}}
+    new_data = {"user": {"age": 30}}  # Attempt to add a new key
+    result = patch.apply(old_data, new_data)
+    assert "age" in result.data["user"], "Should allow setting new attributes"
+    assert "name" in result.data["user"], "Should allow setting new attributes"
+
+def test_root_implicit_list_set_allowed():
+    rules = ["[*]"]
+    patch = patch_rules(rules)
+    old_data = [{"user": {"name": "old"}}]
+    new_data = [{"user": {"age": 30}}]  # Attempt to add a new key
+    result = patch.apply(old_data, new_data)
+    assert "age" in result.data[0]["user"], "Should allow setting new attributes"
+    assert "name" in result.data[0]["user"], "Should allow setting new attributes"
+
+def test_set_nested_array_any_index():
+    rules = ["user.contacts[*].label"]
+    patch = patch_rules(rules)
+    old_data = {"user": {"contacts": [{"label": "old value"}]}}
+    new_data = {"user": {"contacts": [{"label": "new value"}]}}
+    result = patch.apply(old_data, new_data)
+    assert "new value" == result.data["user"]["contacts"][0]["label"], "Should allow setting new attributes"
+
+def test_deny_set_nested_array_any_index():
+    rules = ["!user.contacts[*].label"]
+    patch = patch_rules(rules)
+    old_data = {"user": {"contacts": [{"label": "old value"}]}}
+    new_data = {"user": {"contacts": [{"label": "new value"}]}}
+    result = patch.apply(old_data, new_data)
+    assert "old value" == result.data["user"]["contacts"][0]["label"], "Should allow setting new attributes"

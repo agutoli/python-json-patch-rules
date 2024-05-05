@@ -1,5 +1,4 @@
 import re
-import json
 from typing import Any, Optional, Pattern, List, Set, Tuple, Generator
 from dataclasses import dataclass
 import pydash
@@ -18,11 +17,13 @@ class ResultData:
 
 class JsonPatchRules:
     ROOT_TOKEN_REPLACE = '*|replace'
+    ROOT_TOKEN_KEY = '{*}'
     ROOT_TOKEN_KEY_REPLACE = '{*}|replace'
+    ROOT_TOKEN_ARRAY = '[*]'
     ROOT_TOKEN_ARRAY_REPLACE = '[*]|replace'
 
     PATTERN_WILDCARD_ANY = r'.*'
-    PATTERN_WILDCARD_ANY_KEY = r'[^.]+(?:\.[^.]+)*'
+    PATTERN_WILDCARD_ANY_KEY = r'.'
     PATTERN_WILDCARD_ANY_INDEX = r'\[\d+\]'
 
     def __init__(self, rules: List[str]) -> None:
@@ -34,15 +35,17 @@ class JsonPatchRules:
 
         rule = current_rule[1:] if deny else current_rule
         parts = rule.split('|')
-        path = parts[0].replace('*', self.PATTERN_WILDCARD_ANY)
-        path = path.replace('{*}', self.PATTERN_WILDCARD_ANY_KEY)
+        path = parts[0].replace('{*}', self.PATTERN_WILDCARD_ANY_KEY)
         path = path.replace('[*]', self.PATTERN_WILDCARD_ANY_INDEX)
+
+        # ATTENTION: It must be after any replace that contains "*" character
+        path = path.replace('*', self.PATTERN_WILDCARD_ANY)
         actions = set(parts[1:]) if len(parts) > 1 else {'set'}
 
         if 'replace' in actions:
             pattern = re.compile(f'^{path}.*')
         else:
-            pattern = re.compile(f'^{path}$')
+            pattern = re.compile(f'^{path}*$')
 
         rule_item.path = path
         rule_item.pattern = pattern
@@ -72,15 +75,16 @@ class JsonPatchRules:
     def verify_permission(self, data_path: str, new_data: Any) -> Tuple[bool, RuleItem, Optional[str]]:
         check_all_responses = []
         for rule in self.rules:
-            if self.ROOT_TOKEN_KEY_REPLACE == rule.current_rule:
-                if isinstance(new_data, dict):
-                    return (True, rule, None)
-            elif self.ROOT_TOKEN_ARRAY_REPLACE == rule.current_rule:
-                if isinstance(new_data, list):
-                    return (True, rule, None)
-            elif self.ROOT_TOKEN_REPLACE == rule.current_rule:
-                if isinstance(new_data, (list, dict)):
-                    return (True, rule, None)
+            if self.ROOT_TOKEN_KEY == rule.current_rule and isinstance(new_data, dict):
+                return (True, rule, None)
+            elif self.ROOT_TOKEN_ARRAY == rule.current_rule and isinstance(new_data, list):
+                return (True, rule, None)
+            elif self.ROOT_TOKEN_KEY_REPLACE == rule.current_rule and isinstance(new_data, dict):
+                return (True, rule, None)
+            elif self.ROOT_TOKEN_ARRAY_REPLACE == rule.current_rule and isinstance(new_data, list):
+                return (True, rule, None)
+            elif self.ROOT_TOKEN_REPLACE == rule.current_rule and isinstance(new_data, (list, dict)):
+                return (True, rule, None)
 
             allow = (rule.pattern and rule.pattern.match(data_path) and not rule.deny) or data_path.startswith(rule.current_rule)
             check_all_responses.append((allow, rule, data_path))
@@ -105,8 +109,9 @@ class JsonPatchRules:
                 elif 'replace' in rule_item.actions and data_path:
                     pydash.set_(result.data, rule_item.path, pydash.get(new_data, rule_item.path))
                 else:
-                    new_value = pydash.get(new_data, rule_item.path)
+                    new_value = pydash.get(new_data, path)
                     pydash.set_(result.data, path, new_value)
+
                 if 'unique' in rule_item.actions:
                     actions_data["unique"].add(rule_item.path)
             else:
