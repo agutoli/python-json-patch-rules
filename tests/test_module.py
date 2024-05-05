@@ -173,3 +173,94 @@ def test_deny_set_nested_array_any_index():
     new_data = {"user": {"contacts": [{"label": "new value"}]}}
     result = patch.apply(old_data, new_data)
     assert "old value" == result.data["user"]["contacts"][0]["label"], "Should allow setting new attributes"
+
+def test_no_change_for_nonexistent_paths():
+    rules = ["non.existent.path|replace"]
+    patch = patch_rules(rules)
+    old_data = {"user": {"name": "old"}}
+    new_data = {"user": {"name": "new"}}
+    result = patch.apply(old_data, new_data)
+    assert result.data["user"]["name"] == "old", "Non-existent paths should not affect data"
+
+def test_malformed_rules():
+    rules = ["this|is|not|a|valid|rule"]
+    patch = patch_rules(rules)
+    old_data = {"user": {"name": "old"}}
+    new_data = {"user": {"name": "new"}}
+    result = patch.apply(old_data, new_data)
+    assert result.data["user"]["name"] == "old", "Malformed rules should not affect data"
+
+def test_mixed_valid_and_invalid_operations():
+    rules = ["user.name|replace", "!user.age|replace"]
+    patch = patch_rules(rules)
+    old_data = {"user": {"name": "old", "age": 20}}
+    new_data = {"user": {"name": "new", "age": 30}}
+    result = patch.apply(old_data, new_data)
+    assert result.data["user"]["name"] == "new", "Valid operation should succeed"
+    assert result.data["user"]["age"] == 20, "Invalid operation should be denied"
+
+def test_empty_data_handling():
+    rules = ["*|replace"]
+    patch = patch_rules(rules)
+    old_data = {}
+    new_data = {"user": {"name": "new"}}
+    result = patch.apply(old_data, new_data)
+    assert result.data == {"user": {"name": "new"}}, "Should handle empty old data correctly"
+
+    old_data = {"user": {"name": "old"}}
+    new_data = {}
+    result = patch.apply(old_data, new_data)
+    assert result.data == {}, "Should handle empty new data correctly"
+
+def test_recursive_data_structures():
+    rules = ["user|replace"]
+    patch = patch_rules(rules)
+    old_data = {"user": {"name": "old", "self": "reference"}}
+    new_data = {"user": {"name": "new", "self": old_data["user"]}}
+    result = patch.apply(old_data, new_data)
+    assert result.data["user"]["name"] == "new", "Should replace user correctly"
+    assert result.data["user"]["self"]["name"] == "old", "Should handle recursive structures"
+
+def test_implicit_set_index_zero():
+    rules = ["[0]"]
+    patch = patch_rules(rules)
+    old_data = ["old_value", "another_value"]
+    new_data = ["new_value", "another_value"]
+    result = patch.apply(old_data, new_data)
+    assert result.data[0] == "new_value", "Should allow setting new value at index zero"
+    assert result.data[1] == "another_value", "Should not modify other indices"
+
+def test_deny_specific_nested_property():
+    rules = ["!user.contacts[0].phone"]
+    patch = patch_rules(rules)
+    old_data = {"user": {"contacts": [{"phone": "old_phone"}]}}
+    new_data = {"user": {"contacts": [{"phone": "new_phone"}]}}
+    result = patch.apply(old_data, new_data)
+    assert result.data["user"]["contacts"][0]["phone"] == "old_phone", "Should deny setting new phone number"
+
+def test_allow_and_deny_properties_at_any_index():
+    rules = ["user.contacts[*].label", "!user.contacts[*].phone"]
+    patch = patch_rules(rules)
+    old_data = {"user": {"contacts": [{"label": "old_label", "phone": "old_phone"}]}}
+    new_data = {"user": {"contacts": [{"label": "new_label", "phone": "new_phone"}]}}
+    result = patch.apply(old_data, new_data)
+    assert result.data["user"]["contacts"][0]["label"] == "new_label", "Should allow setting new label"
+    assert result.data["user"]["contacts"][0]["phone"] == "old_phone", "Should deny setting new phone number"
+
+def test_unique_rule_on_array_of_strings():
+    rules = ["[*]|unique"]
+    patch = patch_rules(rules)
+    old_data = ["a", "b", "a", "c"]
+    new_data = ["d", "d", "e", "f", "f"]
+
+    result = patch.apply(old_data, new_data)
+    assert result.data == ['a', 'b', 'c', 'd', 'e', 'f'], "Should apply unique rule and remove duplicates"
+
+def test_nested_unique_rule_on_array_of_strings():
+    rules = ["nested.items[*]|unique"]
+    patch = patch_rules(rules)
+    old_data = {"nested": {"items": ["a", "b", "a", "c"]}}
+    new_data = {"nested": {"items": ["d", "d", "e", "f", "f"]}}
+
+    result = patch.apply(old_data, new_data)
+    assert result.data["nested"]["items"] == ['a', 'b', 'c', 'd', 'e', 'f'], "Should apply unique rule and remove duplicates"
