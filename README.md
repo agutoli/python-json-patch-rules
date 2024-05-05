@@ -41,6 +41,7 @@ pip install python-json-patch-rules
 Let's imagine a more complex JSON structure representing a user profile, including nested objects for personal details, permissions, and an array of contact methods.
 
 ```python
+
 from json_patch_rules import patch_rules
 
 # Define a complex JSON object
@@ -53,17 +54,18 @@ data = {
             "delete": False
         },
         "contacts": [
-            {"type": "home", "number": "1234567890"},
-            {"type": "work", "number": "0987654321"}
+            {"type": "home", "number": "1234567890", "label": "Home Phone"},
+            {"type": "work", "number": "0987654321", "label": "Work Phone"}
         ]
     }
 }
 
 # Define rules to specify allowed updates
 rules = [
-    "user.{name,email}",  # Allow updates to both the name and email
-    "user.permissions.*",  # Allow updates to any permissions fields
-    "user.contacts[*].number"  # Allow updates to the phone number in any contact
+    "!user.permissions.delete",       # Denies deletion of the delete permission under user permissions
+    "user.name",                      # Allows replacing the name attribute under user
+    "user.contacts[0].number",        # Allows replacing the phone number in the first contact
+    "user.contacts[*].label",         # Allows updating label for any contact in the contacts array
 ]
 
 # Initialize patch rules
@@ -72,15 +74,14 @@ patch = patch_rules(rules)
 # Define new data to apply
 new_data = {
     "user": {
-        "name": "Jane Doe",  # This update is allowed
-        "email": "jane@example.com",  # This update is allowed
+        "name": "Jane Doe",
         "permissions": {
-            "edit": False,  # This update is allowed
-            "delete": True  # This update is allowed
+            "edit": False,
+            "delete": True  # This update will be denied by the rule
         },
         "contacts": [
-            {"type": "home", "number": "1111111111"},  # This update is allowed
-            {"type": "work", "number": "2222222222"}  # This update is allowed
+            {"number": "1111111111"},  # Allowed update
+            {"label": "Emergency Phone"}  # Allowed update
         ]
     }
 }
@@ -89,9 +90,9 @@ new_data = {
 result = patch.apply(data, new_data)
 
 # Output the updated JSON object
-print("Patched Data:", result.patched_data)
-print("Denied Paths:", result.denied_paths)
-print("Successed Paths:", result.successed_paths)
+print("Patched Data:", result.data) # patched data
+print("Denied Paths:", result.denied_paths) # Denied Paths: ['user.permissions.edit', 'user.permissions.delete']
+print("Successed Paths:", result.successed_paths) # Successed Paths: ['user.name', 'user.contacts[0].number', 'user.contacts[1].label']
 ```
 
 ### Explanation of This Example
