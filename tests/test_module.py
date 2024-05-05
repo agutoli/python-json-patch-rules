@@ -189,6 +189,8 @@ def test_malformed_rules():
     new_data = {"user": {"name": "new"}}
     result = patch.apply(old_data, new_data)
     assert result.data["user"]["name"] == "old", "Malformed rules should not affect data"
+    assert result.denied_paths == ["user.name"]
+    assert result.successed_paths == []
 
 def test_mixed_valid_and_invalid_operations():
     rules = ["user.name|replace", "!user.age|replace"]
@@ -237,6 +239,8 @@ def test_deny_specific_nested_property():
     new_data = {"user": {"contacts": [{"phone": "new_phone"}]}}
     result = patch.apply(old_data, new_data)
     assert result.data["user"]["contacts"][0]["phone"] == "old_phone", "Should deny setting new phone number"
+    assert result.denied_paths == ["user.contacts[0].phone"]
+    assert result.successed_paths == []
 
 def test_allow_and_deny_properties_at_any_index():
     rules = ["user.contacts[*].label", "!user.contacts[*].phone"]
@@ -264,3 +268,5 @@ def test_nested_unique_rule_on_array_of_strings():
 
     result = patch.apply(old_data, new_data)
     assert result.data["nested"]["items"] == ['a', 'b', 'c', 'd', 'e', 'f'], "Should apply unique rule and remove duplicates"
+    assert result.denied_paths == []
+    assert result.successed_paths == ['nested.items[0]', 'nested.items[1]', 'nested.items[2]', 'nested.items[3]', 'nested.items[4]']

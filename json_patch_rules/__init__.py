@@ -16,6 +16,9 @@ class RuleItem:
 @dataclass
 class ResultData:
     data: Any
+    denied_paths: List[str]
+    successed_paths: List[str]
+
 
 class JsonPatchRules:
     ROOT_TOKEN_REPLACE = '*|replace'
@@ -103,7 +106,7 @@ class JsonPatchRules:
         return (False, RuleItem(set([])), None)
 
     def apply(self, old_data: Any, new_data: Any) -> ResultData:
-        result = ResultData(pydash.clone_deep(old_data))
+        result = ResultData(pydash.clone_deep(old_data), [], [])
 
         actions_data = {"unique": []}
         value_obj_paths = list(self.get_paths(new_data))
@@ -117,6 +120,7 @@ class JsonPatchRules:
                 should_replace = 'replace' in rule_item.actions
                 should_be_unique = 'unique' in rule_item.actions
 
+                result.successed_paths.append(path)
                 if should_replace and data_path is None:
                     result.data = new_data
                 elif should_replace and data_path:
@@ -135,7 +139,7 @@ class JsonPatchRules:
                 elif should_be_unique and not should_replace:
                     actions_data["unique"].append((rule_item, data_path))
             else:
-                print("Not allowed:", path)
+                result.denied_paths.append(path)
 
         for item in actions_data["unique"]:
             rule_item, data_path = item
