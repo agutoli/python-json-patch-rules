@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="python-json-patch-rules",
-    version="0.3.0",
+    version="0.3.1",
     author="Bruno Agutoli",
     author_email="bruno.agutoli@gmail.com",
     description="A library to apply JSON patches with rule-based access control.",

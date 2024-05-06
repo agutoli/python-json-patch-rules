@@ -16,6 +16,7 @@ class RuleItem:
 @dataclass
 class ResultData:
     data: Any
+    errors: List[str]
     denied_paths: List[str]
     successed_paths: List[str]
 
@@ -27,9 +28,9 @@ class JsonPatchRules:
     ROOT_TOKEN_ARRAY = '[*]'
     ROOT_TOKEN_ARRAY_REPLACE = '[*]|replace'
 
-    PATTERN_WILDCARD_ANY = r'(?P<ANY>.*)'
-    PATTERN_WILDCARD_ANY_KEY = r'(?P<ANY_KEY>.*)'
-    PATTERN_WILDCARD_ANY_INDEX = r'(?P<INDEX>\[\d+\])'
+    PATTERN_WILDCARD_ANY = r'.*'
+    PATTERN_WILDCARD_ANY_KEY = r'.*'
+    PATTERN_WILDCARD_ANY_INDEX = r'\[\d+\]'
 
     def __init__(self, rules: List[str]) -> None:
         self.rules: List[RuleItem] = [self.parse_rule(rule) for rule in rules]
@@ -106,7 +107,7 @@ class JsonPatchRules:
         return (False, RuleItem(set([])), None)
 
     def apply(self, old_data: Any, new_data: Any) -> ResultData:
-        result = ResultData(pydash.clone_deep(old_data), [], [])
+        result = ResultData(pydash.clone_deep(old_data), [], [], [])
 
         actions_data = {"unique": []}
         value_obj_paths = list(self.get_paths(new_data))
@@ -114,6 +115,7 @@ class JsonPatchRules:
         if len(value_obj_paths) == 0:
             value_obj_paths = [EMPTY_ARRAY_SYMBOL]
 
+        replace_data = pydash.clone_deep(new_data)
         for path in value_obj_paths:
             is_allowed, rule_item, data_path = self.verify_permission(path, new_data)
             if is_allowed:
@@ -124,7 +126,8 @@ class JsonPatchRules:
                 if should_replace and data_path is None:
                     result.data = new_data
                 elif should_replace and data_path:
-                    pydash.set_(result.data, rule_item.path, pydash.get(new_data, rule_item.path))
+                    pydash.set_(replace_data, data_path, pydash.get(new_data, data_path))
+                    result.data = replace_data
                 elif should_be_unique:
                     new_value = pydash.get(new_data, path)
                     pydash.get(result.data, rule_item.path, []).append(new_value)
@@ -139,6 +142,8 @@ class JsonPatchRules:
                 elif should_be_unique and not should_replace:
                     actions_data["unique"].append((rule_item, data_path))
             else:
+                # Set old value back to overwritten data because user can't change it
+                pydash.set_(replace_data, path, pydash.get(old_data, path))
                 result.denied_paths.append(path)
 
         for item in actions_data["unique"]:

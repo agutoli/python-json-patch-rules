@@ -193,7 +193,10 @@ def test_malformed_rules():
     assert result.successed_paths == []
 
 def test_mixed_valid_and_invalid_operations():
-    rules = ["user.name|replace", "!user.age|replace"]
+    rules = [
+        "user.name|replace",
+        "!user.age|replace"
+    ]
     patch = patch_rules(rules)
     old_data = {"user": {"name": "old", "age": 20}}
     new_data = {"user": {"name": "new", "age": 30}}
@@ -270,3 +273,14 @@ def test_nested_unique_rule_on_array_of_strings():
     assert result.data["nested"]["items"] == ['a', 'b', 'c', 'd', 'e', 'f'], "Should apply unique rule and remove duplicates"
     assert result.denied_paths == []
     assert result.successed_paths == ['nested.items[0]', 'nested.items[1]', 'nested.items[2]', 'nested.items[3]', 'nested.items[4]']
+
+def test_list_of_objects_with_replace():
+    rules = [
+        "[*].tags|replace"
+    ]
+    patch = patch_rules(rules)
+    old_data = [{"tags": ["a", "b", "c"]}]
+    new_data = [{"tags": ["overwrite"]}]
+
+    result = patch.apply(old_data, new_data)
+    assert result.data[0]["tags"] == ['overwrite'], "Should replace array"
