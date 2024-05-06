@@ -1,5 +1,7 @@
 # python-json-patch-rules
 
+`Attention: This library is currently in its alpha version. Please be advised to use it at your own discretion as it may not be completely stable.`
+
 Json Patch Rules is a Python library designed to facilitate the application of JSON patch operations while enforcing customizable validation rules. This library ensures that updates to JSON objects adhere to predefined permissions, making it ideal for systems that require granular access control.
 
 ## Features
